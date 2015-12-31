@@ -400,14 +400,16 @@ func init() {
 	// Default stderrThreshold is ERROR.
 	logging.stderrThreshold = errorLog
 	logging.alsoToStderr = true
+	*logDir = "./"
 
 	logging.setVState(0, nil, false)
 	go logging.flushDaemon()
 }
 
-func SetFlags(verbosity Level, stderrThres int32) {
+func SetFlags(verbosity Level, stderrThres string, logdir string) {
 	logging.verbosity = verbosity
-	logging.stderrThreshold = severity(stderrThres)
+	logging.stderrThreshold.Set(stderrThres)
+	*logDir = logdir
 }
 
 func InitWithFlag(f *flag.FlagSet) {
