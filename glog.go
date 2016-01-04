@@ -400,7 +400,7 @@ func init() {
 	// Default stderrThreshold is ERROR.
 	logging.stderrThreshold = errorLog
 	logging.alsoToStderr = true
-	*logDir = "./"
+	*logDir = "./glog"
 
 	logging.setVState(0, nil, false)
 	go logging.flushDaemon()
