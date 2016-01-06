@@ -33,17 +33,17 @@ import (
 var MaxSize uint64 = 1024 * 1024 * 1800
 
 // logDirs lists the candidate directories for new log files.
-var logDirs []string
+var glogDirs []string
 
 // If non-empty, overrides the choice of directory in which to write logs.
 // See createLogDirs for the full list of possible destinations.
-var logDir = new(string)
+var glogDir = new(string)
 
 func createLogDirs() {
-	if logDir != nil && *logDir != "" {
-		logDirs = append(logDirs, *logDir)
+	if glogDir != nil && *glogDir != "" {
+		glogDirs = append(glogDirs, *glogDir)
 	}
-	logDirs = append(logDirs, os.TempDir())
+	glogDirs = append(glogDirs, os.TempDir())
 }
 
 var (
@@ -103,12 +103,12 @@ var onceLogDirs sync.Once
 // errors.
 func create(tag string, t time.Time) (f *os.File, filename string, err error) {
 	onceLogDirs.Do(createLogDirs)
-	if len(logDirs) == 0 {
+	if len(glogDirs) == 0 {
 		return nil, "", errors.New("log: no log dirs")
 	}
 	name, link := logName(tag, t)
 	var lastErr error
-	for _, dir := range logDirs {
+	for _, dir := range glogDirs {
 		fname := filepath.Join(dir, name)
 		f, err := os.Create(fname)
 		if err == nil {
