@@ -551,7 +551,8 @@ where the fields are defined as follows:
 	msg              The user-supplied message
 */
 func (l *loggingT) header(s severity, depth int) (*buffer, string, int) {
-	_, file, line, ok := runtime.Caller(3 + depth)
+	pc, file, line, ok := runtime.Caller(3 + depth)
+	funcName := "unknown"
 	if !ok {
 		file = "???"
 		line = 1
@@ -560,12 +561,20 @@ func (l *loggingT) header(s severity, depth int) (*buffer, string, int) {
 		if slash >= 0 {
 			file = file[slash+1:]
 		}
+		fn := runtime.FuncForPC(pc)
+		if fn != nil {
+			funcName = fn.Name()
+			index := strings.LastIndexByte(funcName, '/')
+			if index >= 0 {
+				funcName = funcName[index+1:]
+			}
+		}
 	}
-	return l.formatHeader(s, file, line), file, line
+	return l.formatHeader(s, file, line, funcName), file, line
 }
 
 // formatHeader formats a log header using the provided file name and line number.
-func (l *loggingT) formatHeader(s severity, file string, line int) *buffer {
+func (l *loggingT) formatHeader(s severity, file string, line int, funcName string) *buffer {
 	now := timeNow()
 	if line < 0 {
 		line = 0 // not a real line number, but acceptable to someDigits
@@ -601,6 +610,8 @@ func (l *loggingT) formatHeader(s severity, file string, line int) *buffer {
 	buf.tmp[n+1] = ']'
 	buf.tmp[n+2] = ' '
 	buf.Write(buf.tmp[:n+3])
+	buf.WriteString(funcName)
+	buf.WriteByte(' ')
 	return buf
 }
 
@@ -677,7 +688,7 @@ func (l *loggingT) printf(s severity, format string, args ...interface{}) {
 // alsoLogToStderr is true, the log message always appears on standard error; it
 // will also appear in the log file unless --logtostderr is set.
 func (l *loggingT) printWithFileLine(s severity, file string, line int, alsoToStderr bool, args ...interface{}) {
-	buf := l.formatHeader(s, file, line)
+	buf := l.formatHeader(s, file, line, "unknown")
 	fmt.Fprint(buf, args...)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		buf.WriteByte('\n')
