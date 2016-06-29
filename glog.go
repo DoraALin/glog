@@ -412,8 +412,6 @@ func SetFlags(verbosity Level, stderrThres string, logdir string) {
 	innerlogging.verbosity.set(verbosity)
 	innerlogging.stderrThreshold.Set(stderrThres)
 	*glogDir = logdir
-	glogDirs = createLogDirs(*glogDir)
-	innerlogging.logDirs = glogDirs
 }
 
 func InitWithFlag(f *flag.FlagSet) {
