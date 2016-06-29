@@ -408,9 +408,13 @@ func init() {
 	innerlogging.setVState(0, nil, false)
 }
 
-func SetFlags(verbosity Level, stderrThres string, logdir string) {
+func SetFlags(verbosity Level, stderrThres string, logdir string,
+	toStderr bool, alsoToStderr bool, rotateDays int64) {
 	innerlogging.verbosity.set(verbosity)
 	innerlogging.stderrThreshold.Set(stderrThres)
+	innerlogging.toStderr = toStderr
+	innerlogging.alsoToStderr = alsoToStderr
+	innerlogging.RotateDays = rotateDays
 	*glogDir = logdir
 }
 
