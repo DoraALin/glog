@@ -343,6 +343,7 @@ func TestRollover(t *testing.T) {
 	f := flag.NewFlagSet("", flag.ExitOnError)
 	InitWithFlag(f)
 	f.Parse([]string{""})
+	StartWorker(time.Second)
 
 	Info("x") // Be sure we have a file.
 	info, ok := innerlogging.file[infoLog].(*syncBuffer)

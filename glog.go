@@ -431,10 +431,12 @@ func InitWithFlag(f *flag.FlagSet) {
 	f.Var(&innerlogging.traceLocation, "log_backtrace_at", "when logging hits line file:N, emit a stack trace")
 	glogDir = f.String("glog_dir", "", "If non-empty, write log files in this directory")
 	innerlogging.flag = f
+}
 
+func StartWorker(interval time.Duration) {
 	glogDirs = createLogDirs(*glogDir)
 	innerlogging.logDirs = glogDirs
-	go innerlogging.flushDaemon()
+	go innerlogging.flushDaemon(interval)
 }
 
 // Flush flushes all pending log I/O.
@@ -496,7 +498,7 @@ type buffer struct {
 var innerlogging loggingT
 
 func NewGlogger(verbosity Level, stderrThres string, logdir string, maxSize int64, rotateDays int64,
-	toStderr bool, alsoToStderr bool) (*loggingT, error) {
+	toStderr bool, alsoToStderr bool, flushInterval time.Duration) (*loggingT, error) {
 	l := &loggingT{}
 	l.setVState(0, nil, false)
 	l.verbosity.set(verbosity)
@@ -510,7 +512,7 @@ func NewGlogger(verbosity Level, stderrThres string, logdir string, maxSize int6
 		return nil, errors.New("log: no log dirs")
 	}
 	l.logDirs = dirs
-	go l.flushDaemon()
+	go l.flushDaemon(flushInterval)
 	return l, nil
 }
 
@@ -946,11 +948,9 @@ func (l *loggingT) createFiles(sev severity) error {
 	return nil
 }
 
-const flushInterval = 3 * time.Second
-
 // flushDaemon periodically flushes the log file buffers.
-func (l *loggingT) flushDaemon() {
-	for _ = range time.NewTicker(flushInterval).C {
+func (l *loggingT) flushDaemon(interval time.Duration) {
+	for _ = range time.NewTicker(interval).C {
 		l.lockAndFlushAll()
 	}
 }
