@@ -39,11 +39,13 @@ var glogDirs []string
 // See createLogDirs for the full list of possible destinations.
 var glogDir = new(string)
 
-func createLogDirs() {
-	if glogDir != nil && *glogDir != "" {
-		glogDirs = append(glogDirs, *glogDir)
+func createLogDirs(d string) []string {
+	dirs := make([]string, 0)
+	if d != "" {
+		dirs = append(dirs, d)
 	}
-	glogDirs = append(glogDirs, os.TempDir())
+	dirs = append(dirs, os.TempDir())
+	return dirs
 }
 
 var (
@@ -101,14 +103,13 @@ var onceLogDirs sync.Once
 // contains tag ("INFO", "FATAL", etc.) and t.  If the file is created
 // successfully, create also attempts to update the symlink for that tag, ignoring
 // errors.
-func create(tag string, t time.Time) (f *os.File, filename string, err error) {
-	onceLogDirs.Do(createLogDirs)
-	if len(glogDirs) == 0 {
+func create(tag string, t time.Time, logDirs []string) (f *os.File, filename string, err error) {
+	if len(logDirs) == 0 {
 		return nil, "", errors.New("log: no log dirs")
 	}
 	name, link := logName(tag, t)
 	var lastErr error
-	for _, dir := range glogDirs {
+	for _, dir := range logDirs {
 		fname := filepath.Join(dir, name)
 		f, err := os.Create(fname)
 		if err == nil {

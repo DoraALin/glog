@@ -18,6 +18,7 @@ package glog
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	stdLog "log"
 	"path/filepath"
@@ -339,6 +340,9 @@ func TestRollover(t *testing.T) {
 	defer func(previous uint64) { MaxSize = previous }(MaxSize)
 	MaxSize = 512
 	innerlogging.MaxSize = int64(MaxSize)
+	f := flag.NewFlagSet("", flag.ExitOnError)
+	InitWithFlag(f)
+	f.Parse([]string{""})
 
 	Info("x") // Be sure we have a file.
 	info, ok := innerlogging.file[infoLog].(*syncBuffer)
