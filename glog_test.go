@@ -54,6 +54,9 @@ func (f *flushBuffer) Sync() error {
 	return nil
 }
 
+func (f *flushBuffer) CheckRotote() {
+}
+
 // swap sets the log writers and returns the old array.
 func (l *loggingT) swap(writers [numSeverity]flushSyncWriter) (old [numSeverity]flushSyncWriter) {
 	l.mu.Lock()
@@ -335,6 +338,7 @@ func TestRollover(t *testing.T) {
 	}
 	defer func(previous uint64) { MaxSize = previous }(MaxSize)
 	MaxSize = 512
+	innerlogging.MaxSize = int64(MaxSize)
 
 	Info("x") // Be sure we have a file.
 	info, ok := innerlogging.file[infoLog].(*syncBuffer)

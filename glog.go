@@ -392,6 +392,7 @@ func (t *traceLocation) Set(value string) error {
 type flushSyncWriter interface {
 	Flush() error
 	Sync() error
+	CheckRotote()
 	io.Writer
 }
 
@@ -400,6 +401,8 @@ func init() {
 	// Default stderrThreshold is ERROR.
 	innerlogging.stderrThreshold = errorLog
 	innerlogging.alsoToStderr = true
+	innerlogging.MaxSize = int64(MaxSize)
+	innerlogging.RotateDays = 10
 	*glogDir = "./glog"
 
 	innerlogging.setVState(0, nil, false)
@@ -419,6 +422,8 @@ func InitWithFlag(f *flag.FlagSet) {
 	}
 	f.BoolVar(&innerlogging.toStderr, "logtostderr", false, "log to standard error instead of files")
 	f.BoolVar(&innerlogging.alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
+	f.Int64Var(&innerlogging.MaxSize, "glog_maxsize", int64(MaxSize), "log max size before rotate")
+	f.Int64Var(&innerlogging.RotateDays, "glog_rotate_days", 10, "days before rotate")
 	f.Var(&innerlogging.verbosity, "gverb", "log level for V logs")
 	f.Var(&innerlogging.stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
 	f.Var(&innerlogging.vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
@@ -468,9 +473,11 @@ type loggingT struct {
 	traceLocation traceLocation
 	// These flags are modified only under lock, although verbosity may be fetched
 	// safely using atomic.LoadInt32.
-	vmodule   moduleSpec // The state of the -vmodule flag.
-	verbosity Level      // V logging level, the value of the -v flag/
-	flag      *flag.FlagSet
+	vmodule    moduleSpec // The state of the -vmodule flag.
+	verbosity  Level      // V logging level, the value of the -v flag/
+	flag       *flag.FlagSet
+	MaxSize    int64
+	RotateDays int64
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -831,17 +838,24 @@ func (l *loggingT) exit(err error) {
 type syncBuffer struct {
 	logger *loggingT
 	*bufio.Writer
-	file   *os.File
-	sev    severity
-	nbytes uint64 // The number of bytes written to this file
+	file       *os.File
+	sev        severity
+	nbytes     uint64 // The number of bytes written to this file
+	createTime time.Time
 }
 
 func (sb *syncBuffer) Sync() error {
 	return sb.file.Sync()
 }
 
+func (sb *syncBuffer) CheckRotote() {
+	if int64(time.Since(sb.createTime).Hours()) >= innerlogging.RotateDays*24 {
+		sb.rotateFile(time.Now())
+	}
+}
+
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
-	if sb.nbytes+uint64(len(p)) >= MaxSize {
+	if sb.nbytes+uint64(len(p)) >= uint64(innerlogging.MaxSize) {
 		if err := sb.rotateFile(time.Now()); err != nil {
 			sb.logger.exit(err)
 		}
@@ -877,6 +891,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 	fmt.Fprintf(&buf, "Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu threadid file:line] msg\n")
 	n, err := sb.file.Write(buf.Bytes())
 	sb.nbytes += uint64(n)
+	sb.createTime = now
 	return err
 }
 
@@ -929,6 +944,7 @@ func (l *loggingT) flushAll() {
 		if file != nil {
 			file.Flush() // ignore error
 			file.Sync()  // ignore error
+			file.CheckRotote()
 		}
 	}
 }
