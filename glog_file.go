@@ -19,7 +19,6 @@
 package glog
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/user"
@@ -105,7 +104,7 @@ var onceLogDirs sync.Once
 // errors.
 func create(tag string, t time.Time, logDirs []string) (f *os.File, filename string, err error) {
 	if len(logDirs) == 0 {
-		return nil, "", errors.New("log: no log dirs")
+		panic("no log dirs: " + *glogDir)
 	}
 	name, link := logName(tag, t)
 	var lastErr error

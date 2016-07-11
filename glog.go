@@ -400,12 +400,16 @@ func init() {
 	innerlogging.flag = flag.CommandLine
 	// Default stderrThreshold is ERROR.
 	innerlogging.stderrThreshold = errorLog
-	innerlogging.alsoToStderr = true
+	innerlogging.alsoToStderr = false
 	innerlogging.MaxSize = int64(MaxSize)
 	innerlogging.RotateDays = 10
 	*glogDir = "./glog"
 
 	innerlogging.setVState(0, nil, false)
+}
+
+func SetGLogDir(dir string) {
+	*glogDir = dir
 }
 
 func SetFlags(verbosity Level, stderrThres string, logdir string,
@@ -438,6 +442,10 @@ func InitWithFlag(f *flag.FlagSet) {
 func StartWorker(interval time.Duration) {
 	glogDirs = createLogDirs(*glogDir)
 	innerlogging.logDirs = glogDirs
+	if len(glogDirs) == 0 {
+		panic("no log dir: " + *glogDir)
+	}
+	os.MkdirAll(glogDirs[0], 0755)
 	go innerlogging.flushDaemon(interval)
 }
 
@@ -511,7 +519,7 @@ func NewGlogger(verbosity Level, stderrThres string, logdir string, maxSize int6
 	l.RotateDays = rotateDays
 	dirs := createLogDirs(logdir)
 	if len(dirs) == 0 {
-		return nil, errors.New("log: no log dirs")
+		return nil, errors.New("log: no log dirs: " + logdir)
 	}
 	l.logDirs = dirs
 	go l.flushDaemon(flushInterval)
@@ -905,6 +913,9 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		sb.file.Close()
 	}
 	var err error
+	var tmpBuf bytes.Buffer
+	fmt.Fprintf(&tmpBuf, "Log file created at: %v\n", sb.logDirs)
+	os.Stderr.Write(tmpBuf.Bytes())
 	sb.file, _, err = create(severityName[sb.sev], now, sb.logDirs)
 	sb.nbytes = 0
 	if err != nil {
