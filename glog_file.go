@@ -104,7 +104,7 @@ var onceLogDirs sync.Once
 // errors.
 func create(tag string, t time.Time, logDirs []string) (f *os.File, filename string, err error) {
 	if len(logDirs) == 0 {
-		panic("no log dirs: " + *glogDir)
+		return nil, "", fmt.Errorf("no log dirs: %v", *glogDir)
 	}
 	name, link := logName(tag, t)
 	var lastErr error
