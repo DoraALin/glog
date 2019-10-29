@@ -98,11 +98,16 @@ func logName(tag string, t time.Time) (name, link string) {
 
 var onceLogDirs sync.Once
 
+var testCreateFail bool
+
 // create creates a new log file and returns the file and its filename, which
 // contains tag ("INFO", "FATAL", etc.) and t.  If the file is created
 // successfully, create also attempts to update the symlink for that tag, ignoring
 // errors.
 func create(tag string, t time.Time, logDirs []string) (f *os.File, filename string, err error) {
+	if testCreateFail {
+		return nil, "", fmt.Errorf("test create file failed")
+	}
 	if len(logDirs) == 0 {
 		return nil, "", fmt.Errorf("no log dirs: %v", *glogDir)
 	}

@@ -330,6 +330,84 @@ func TestVmoduleGlob(t *testing.T) {
 	}
 }
 
+func TestRolloverFailed(t *testing.T) {
+	setFlags()
+	var err error
+	defer func(previous func(error)) { logExitFunc = previous }(logExitFunc)
+	logExitFunc = func(e error) {
+		err = e
+	}
+	defer func(previous uint64) { MaxSize = previous }(MaxSize)
+	defer func() {
+		testCreateFail = false
+	}()
+	MaxSize = 512
+	innerlogging.MaxSize = int64(MaxSize)
+	f := flag.NewFlagSet("", flag.ExitOnError)
+	InitWithFlag(f)
+	f.Parse([]string{""})
+	StartWorker(time.Second)
+
+	Info("x") // Be sure we have a file.
+	info, ok := innerlogging.file[infoLog].(*syncBuffer)
+	if !ok {
+		t.Fatal("info wasn't created")
+	}
+	if err != nil {
+		t.Fatalf("info has initial error: %v", err)
+	}
+	testCreateFail = true
+	fname0 := info.file.Name()
+	Info(strings.Repeat("x", int(MaxSize))) // force a rollover
+	if err == nil {
+		t.Fatalf("info should have (while create failed) error after big write: %v", err)
+	}
+	// reset create failed error
+	err = nil
+	testCreateFail = false
+	Info(strings.Repeat("x", int(MaxSize))) // force a rollover
+	if err != nil {
+		t.Fatalf("info has error after big write: %v", err)
+	}
+	testCreateFail = true
+
+	// Make sure the next log file gets a file name with a different
+	// time stamp.
+	//
+	// TODO: determine whether we need to support subsecond log
+	// rotation.  C++ does not appear to handle this case (nor does it
+	// handle Daylight Savings Time properly).
+	time.Sleep(1 * time.Second)
+
+	Info("x") // create a new file
+	if err == nil {
+		t.Fatalf("error should be set if create failed after rotation: %v", err)
+	}
+	fname1 := info.file.Name()
+	if fname0 != fname1 {
+		t.Errorf("info.f.Name should not change for failed: %v", fname0)
+	}
+	if info.nbytes < MaxSize {
+		t.Errorf("file size should not be reset: %d", info.nbytes)
+	}
+	err = nil
+	testCreateFail = false
+	// make sure we can recover if create success next
+	time.Sleep(1 * time.Second)
+
+	Info("x") // create a new file
+	if err != nil {
+		t.Fatalf("error after rotation: %v", err)
+	}
+	fname1 = info.file.Name()
+	if fname0 == fname1 {
+		t.Errorf("info.f.Name did not change: %v", fname0)
+	}
+	if info.nbytes >= MaxSize {
+		t.Errorf("file size was not reset: %d", info.nbytes)
+	}
+}
+
 func TestRollover(t *testing.T) {
 	setFlags()
 	var err error
@@ -379,7 +457,6 @@ func TestRollover(t *testing.T) {
 		t.Errorf("file size was not reset: %d", info.nbytes)
 	}
 }
-
 func TestLogBacktraceAt(t *testing.T) {
 	setFlags()
 	defer innerlogging.swap(innerlogging.newBuffers())

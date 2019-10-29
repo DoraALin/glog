@@ -764,18 +764,21 @@ func (l *loggingT) output(s severity, buf *buffer, file string, line int, alsoTo
 				l.exit(err)
 			}
 		}
-		switch s {
-		case fatalLog:
-			l.file[fatalLog].Write(data)
-			fallthrough
-		case errorLog:
-			l.file[errorLog].Write(data)
-			fallthrough
-		case warningLog:
-			l.file[warningLog].Write(data)
-			fallthrough
-		case infoLog:
-			l.file[infoLog].Write(data)
+		// it may failed to create log file
+		if l.file[s] != nil {
+			switch s {
+			case fatalLog:
+				l.file[fatalLog].Write(data)
+				fallthrough
+			case errorLog:
+				l.file[errorLog].Write(data)
+				fallthrough
+			case warningLog:
+				l.file[warningLog].Write(data)
+				fallthrough
+			case infoLog:
+				l.file[infoLog].Write(data)
+			}
 		}
 	}
 	if s == fatalLog {
@@ -854,6 +857,11 @@ func stacks(all bool) []byte {
 // would make its use clumsier.
 var logExitFunc func(error)
 
+// SetLogExitFunc change the behavior while creating or writing log files failed
+func SetLogExitFunc(f func(error)) {
+	logExitFunc = f
+}
+
 // exit is called if there is trouble creating or writing log files.
 // It flushes the logs and exits the program; there's no point in hanging around.
 // l.mu is held.
@@ -899,29 +907,29 @@ func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 		}
 	}
 	n, err = sb.Writer.Write(p)
-	sb.nbytes += uint64(n)
 	if err != nil {
 		sb.logger.exit(err)
+	} else {
+		sb.nbytes += uint64(n)
 	}
 	return
 }
 
 // rotateFile closes the syncBuffer's file and starts a new one.
 func (sb *syncBuffer) rotateFile(now time.Time) error {
+	var tmpBuf bytes.Buffer
+	fmt.Fprintf(&tmpBuf, "Log file created at: %v\n", sb.logDirs)
+	os.Stderr.Write(tmpBuf.Bytes())
+	cfile, _, err := create(severityName[sb.sev], now, sb.logDirs)
+	if err != nil {
+		return err
+	}
 	if sb.file != nil {
 		sb.Flush()
 		sb.file.Close()
 	}
-	var err error
-	var tmpBuf bytes.Buffer
-	fmt.Fprintf(&tmpBuf, "Log file created at: %v\n", sb.logDirs)
-	os.Stderr.Write(tmpBuf.Bytes())
-	sb.file, _, err = create(severityName[sb.sev], now, sb.logDirs)
+	sb.file = cfile
 	sb.nbytes = 0
-	if err != nil {
-		return err
-	}
-
 	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
 
 	// Write header.
