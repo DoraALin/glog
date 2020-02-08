@@ -51,7 +51,7 @@ func (f *flushBuffer) Flush() error {
 	return nil
 }
 
-func (f *flushBuffer) Sync() error {
+func (f *flushBuffer) Sync(fsync bool) error {
 	return nil
 }
 
@@ -497,5 +497,37 @@ func BenchmarkHeader(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		buf, _, _ := innerlogging.header(infoLog, 0)
 		innerlogging.putBuffer(buf)
+	}
+}
+
+func BenchmarkNoFsync(b *testing.B) {
+	setFlags()
+	defer func(previous uint64) { MaxSize = previous }(MaxSize)
+	innerlogging.SetFsync(false)
+	MaxSize = 1024 * 1024
+	innerlogging.MaxSize = int64(MaxSize)
+	f := flag.NewFlagSet("", flag.ExitOnError)
+	InitWithFlag(f)
+	f.Parse([]string{""})
+	innerlogging.SetFsync(false)
+	StartWorker(time.Second)
+	for i := 0; i < b.N; i++ {
+		Info("test")
+	}
+}
+
+func BenchmarkUseFsync(b *testing.B) {
+	setFlags()
+	defer func(previous uint64) { MaxSize = previous }(MaxSize)
+	innerlogging.SetFsync(true)
+	MaxSize = 1024 * 1024
+	innerlogging.MaxSize = int64(MaxSize)
+	f := flag.NewFlagSet("", flag.ExitOnError)
+	InitWithFlag(f)
+	f.Parse([]string{""})
+	innerlogging.SetFsync(true)
+	StartWorker(time.Second)
+	for i := 0; i < b.N; i++ {
+		Info("test")
 	}
 }

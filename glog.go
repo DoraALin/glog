@@ -391,7 +391,7 @@ func (t *traceLocation) Set(value string) error {
 // flushSyncWriter is the interface satisfied by logging destinations.
 type flushSyncWriter interface {
 	Flush() error
-	Sync() error
+	Sync(fsync bool) error
 	CheckRotote()
 	io.Writer
 }
@@ -496,6 +496,7 @@ type loggingT struct {
 	MaxSize    int64
 	RotateDays int64
 	logDirs    []string
+	useFsync   bool
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -524,6 +525,10 @@ func NewGlogger(verbosity Level, stderrThres string, logdir string, maxSize int6
 	l.logDirs = dirs
 	go l.flushDaemon(flushInterval)
 	return l, nil
+}
+
+func (l *loggingT) SetFsync(on bool) {
+	l.useFsync = on
 }
 
 // setVState sets a consistent state for V innerlogging.
@@ -890,8 +895,11 @@ type syncBuffer struct {
 	logDirs    []string
 }
 
-func (sb *syncBuffer) Sync() error {
-	return sb.file.Sync()
+func (sb *syncBuffer) Sync(fsync bool) error {
+	if fsync {
+		return sb.file.Sync()
+	}
+	return nil
 }
 
 func (sb *syncBuffer) CheckRotote() {
@@ -994,8 +1002,8 @@ func (l *loggingT) flushAll() {
 	for s := fatalLog; s >= infoLog; s-- {
 		file := l.file[s]
 		if file != nil {
-			file.Flush() // ignore error
-			file.Sync()  // ignore error
+			file.Flush()          // ignore error
+			file.Sync(l.useFsync) // ignore error
 			file.CheckRotote()
 		}
 	}
