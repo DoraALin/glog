@@ -412,6 +412,10 @@ func SetGLogDir(dir string) {
 	*glogDir = dir
 }
 
+func SetFsync(on bool) {
+	innerlogging.SetFsync(on)
+}
+
 func SetFlags(verbosity Level, stderrThres string, logdir string,
 	toStderr bool, alsoToStderr bool, rotateDays int64) {
 	innerlogging.verbosity.set(verbosity)
