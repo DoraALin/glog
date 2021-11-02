@@ -393,6 +393,7 @@ type flushSyncWriter interface {
 	Flush() error
 	Sync(fsync bool) error
 	CheckRotote()
+	CleanOldLogs() error
 	io.Writer
 }
 
@@ -501,6 +502,9 @@ type loggingT struct {
 	RotateDays int64
 	logDirs    []string
 	useFsync   bool
+
+	//retention opt
+	maxRetentionNum int
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -533,6 +537,13 @@ func NewGlogger(verbosity Level, stderrThres string, logdir string, maxSize int6
 
 func (l *loggingT) SetFsync(on bool) {
 	l.useFsync = on
+}
+
+func (l *loggingT) SetMaxRetentionLogNum(maxRetention int) {
+	if maxRetention <= 0 {
+		return
+	}
+	l.maxRetentionNum = maxRetention
 }
 
 // setVState sets a consistent state for V innerlogging.
@@ -892,16 +903,29 @@ func (l *loggingT) exit(err error) {
 type syncBuffer struct {
 	logger *loggingT
 	*bufio.Writer
-	file       *os.File
-	sev        severity
-	nbytes     uint64 // The number of bytes written to this file
-	createTime time.Time
-	logDirs    []string
+	file                *os.File
+	sev                 severity
+	nbytes              uint64 // The number of bytes written to this file
+	createTime          time.Time
+	logDirs             []string
+	maxRetentionNum     int
+	rententionFileNames []string
 }
 
 func (sb *syncBuffer) Sync(fsync bool) error {
 	if fsync {
 		return sb.file.Sync()
+	}
+	return nil
+}
+
+func (sb *syncBuffer) CleanOldLogs() error {
+	lnow := len(sb.rententionFileNames)
+	if sb.maxRetentionNum > 0 && lnow > sb.maxRetentionNum {
+		filesToClean := sb.rententionFileNames[:lnow-sb.maxRetentionNum]
+		sb.deleteFiles(filesToClean)
+		newRetensionFileNames := sb.rententionFileNames[lnow-sb.maxRetentionNum:]
+		sb.rententionFileNames = newRetensionFileNames
 	}
 	return nil
 }
@@ -927,14 +951,24 @@ func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	return
 }
 
+func (sb *syncBuffer) deleteFiles(fnames []string) error {
+	for _, f := range fnames {
+		os.Remove(f)
+	}
+	return nil
+}
+
 // rotateFile closes the syncBuffer's file and starts a new one.
 func (sb *syncBuffer) rotateFile(now time.Time) error {
 	var tmpBuf bytes.Buffer
 	fmt.Fprintf(&tmpBuf, "Log file created at: %v\n", sb.logDirs)
 	os.Stderr.Write(tmpBuf.Bytes())
-	cfile, _, err := create(severityName[sb.sev], now, sb.logDirs)
+	cfile, fname, err := create(severityName[sb.sev], now, sb.logDirs)
 	if err != nil {
 		return err
+	}
+	if sb.maxRetentionNum > 0 {
+		sb.rententionFileNames = append(sb.rententionFileNames, fname)
 	}
 	if sb.file != nil {
 		sb.Flush()
@@ -969,9 +1003,10 @@ func (l *loggingT) createFiles(sev severity) error {
 	// has already been created, we can stop.
 	for s := sev; s >= infoLog && l.file[s] == nil; s-- {
 		sb := &syncBuffer{
-			logger:  l,
-			sev:     s,
-			logDirs: l.logDirs,
+			logger:          l,
+			sev:             s,
+			logDirs:         l.logDirs,
+			maxRetentionNum: l.maxRetentionNum,
 		}
 		if err := sb.rotateFile(now); err != nil {
 			return err
@@ -985,6 +1020,7 @@ func (l *loggingT) createFiles(sev severity) error {
 func (l *loggingT) flushDaemon(interval time.Duration) {
 	for _ = range time.NewTicker(interval).C {
 		l.lockAndFlushAll()
+		l.lockAndCleanOldLogs()
 	}
 }
 
@@ -992,11 +1028,26 @@ func (l *loggingT) Flush() {
 	l.lockAndFlushAll()
 }
 
-// lockAndFlushAll is like flushAll but locks l.mu first.
 func (l *loggingT) lockAndFlushAll() {
 	l.mu.Lock()
 	l.flushAll()
 	l.mu.Unlock()
+}
+
+func (l *loggingT) lockAndCleanOldLogs() {
+	l.mu.Lock()
+	l.cleanOldLogs()
+	l.mu.Unlock()
+}
+
+func (l *loggingT) cleanOldLogs() {
+	// Flush from fatal down, in case there's trouble flushing.
+	for s := fatalLog; s >= infoLog; s-- {
+		file := l.file[s]
+		if file != nil {
+			file.CleanOldLogs()
+		}
+	}
 }
 
 // flushAll flushes all the logs and attempts to "sync" their data to disk.

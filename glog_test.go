@@ -58,6 +58,10 @@ func (f *flushBuffer) Sync(fsync bool) error {
 func (f *flushBuffer) CheckRotote() {
 }
 
+func (f *flushBuffer) CleanOldLogs() error {
+	return nil
+}
+
 // swap sets the log writers and returns the old array.
 func (l *loggingT) swap(writers [numSeverity]flushSyncWriter) (old [numSeverity]flushSyncWriter) {
 	l.mu.Lock()
@@ -530,4 +534,32 @@ func BenchmarkUseFsync(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		Info("test")
 	}
+}
+
+func TestCleanOldLogs(t *testing.T) {
+	setFlags()
+	defer func() {
+		innerlogging.maxRetentionNum = 0
+	}()
+	innerlogging.maxRetentionNum = 2
+	f := flag.NewFlagSet("", flag.ExitOnError)
+	InitWithFlag(f)
+	f.Parse([]string{""})
+	StartWorker(time.Second)
+	innerlogging.file = [numSeverity]flushSyncWriter{}
+	innerlogging.createFiles(fatalLog)
+	for i := 0; i < 2; i++ {
+		for _, file := range innerlogging.file {
+			file.(*syncBuffer).rotateFile(time.Now())
+		}
+	}
+	//make sure there are only 2 file after 1s
+	time.Sleep(3 * time.Second)
+	for _, file := range innerlogging.file {
+		lenRetantionFileNames := len(file.(*syncBuffer).rententionFileNames)
+		if lenRetantionFileNames != innerlogging.maxRetentionNum {
+			t.Errorf("retantionFileNames %d do not match %d", lenRetantionFileNames, innerlogging.maxRetentionNum)
+		}
+	}
+
 }
