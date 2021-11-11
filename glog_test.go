@@ -541,25 +541,28 @@ func TestCleanOldLogs(t *testing.T) {
 	defer func() {
 		innerlogging.maxRetentionNum = 0
 	}()
-	innerlogging.maxRetentionNum = 2
-	f := flag.NewFlagSet("", flag.ExitOnError)
-	InitWithFlag(f)
-	f.Parse([]string{""})
-	StartWorker(time.Second)
-	innerlogging.file = [numSeverity]flushSyncWriter{}
-	innerlogging.createFiles(fatalLog)
-	for i := 0; i < 2; i++ {
-		for _, file := range innerlogging.file {
-			file.(*syncBuffer).rotateFile(time.Now())
-		}
-	}
-	//make sure there are only 2 file after 1s
-	time.Sleep(3 * time.Second)
-	for _, file := range innerlogging.file {
-		lenRetantionFileNames := len(file.(*syncBuffer).rententionFileNames)
-		if lenRetantionFileNames != innerlogging.maxRetentionNum {
-			t.Errorf("retantionFileNames %d do not match %d", lenRetantionFileNames, innerlogging.maxRetentionNum)
-		}
-	}
+	retentionNumForTest := []int{2, 3, 10, 20, 50}
+	for _, num := range retentionNumForTest {
+		innerlogging.maxRetentionNum = num
+		f := flag.NewFlagSet("", flag.ExitOnError)
+		InitWithFlag(f)
+		f.Parse([]string{""})
+		StartWorker(time.Second)
 
+		innerlogging.file = [numSeverity]flushSyncWriter{}
+		innerlogging.createFiles(fatalLog)
+		for i := 0; i < num; i++ {
+			for _, file := range innerlogging.file {
+				file.(*syncBuffer).rotateFile(time.Now())
+			}
+		}
+		//make sure there are only 2 file after 1s
+		time.Sleep(3 * time.Second)
+		for _, file := range innerlogging.file {
+			lenRetantionFileNames := len(file.(*syncBuffer).rententionFileNames)
+			if lenRetantionFileNames != innerlogging.maxRetentionNum || lenRetantionFileNames != num {
+				t.Errorf("retantionFileNames %d do not match %d", lenRetantionFileNames, innerlogging.maxRetentionNum)
+			}
+		}
+	}
 }
