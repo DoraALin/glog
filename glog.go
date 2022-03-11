@@ -440,6 +440,7 @@ func InitWithFlag(f *flag.FlagSet) {
 	f.Var(&innerlogging.stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
 	f.Var(&innerlogging.vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
 	f.Var(&innerlogging.traceLocation, "log_backtrace_at", "when logging hits line file:N, emit a stack trace")
+	f.IntVar(&innerlogging.maxRetentionNum, "log_max_retention_num", 0, "max log number to maintain, the oldest log is deleted when this number exceed")
 	glogDir = f.String("glog_dir", "", "If non-empty, write log files in this directory")
 	innerlogging.flag = f
 }
